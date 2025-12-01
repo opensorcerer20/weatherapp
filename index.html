@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <style>
+    body {
+      background-color: #121212;
+    }
+    h3 {
+      margin-top: 0;
+    }
+    .centered-box {
+      max-width: 400px;
+      height: 200px;
+      border-radius: 10px;
+      justify-content: center;
+      align-items: center;
+      border: 1px solid #ccc;
+      background-color: #761f7b;
+      color: #eeeeee;
+      font-family: Arial, Helvetica, sans-serif;
+      padding: 10px;
+      margin: 10px;
+      flex: 1;
+    }
+    #bikeday1, #bikeday2, #bikeday3 {
+      padding: 10px;
+    }
+    .box-row {
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+    }
+    h1 {
+      color: #eeeeee;
+      font-family: Arial, Helvetica, sans-serif;
+      text-align: center;
+    }
+    #weather-graph {
+      margin: 20px auto;
+      max-width: 1200px;
+      padding: 20px;
+      background-color: #1e1e1e;
+      border-radius: 10px;
+    }
+    #weather-graph canvas {
+      width: 100%;
+      height: 400px;
+    }
+    .graph-controls {
+      margin: 20px auto;
+      max-width: 1200px;
+      padding: 10px 20px;
+      text-align: center;
+    }
+    .graph-controls label {
+      color: #eeeeee;
+      font-family: Arial, Helvetica, sans-serif;
+      margin-right: 10px;
+    }
+    .graph-controls input {
+      width: 50px;
+      padding: 5px;
+      font-size: 16px;
+      text-align: center;
+      background-color: #2a2a2a;
+      color: #eeeeee;
+      border: 1px solid #555;
+      border-radius: 5px;
+    }
+    .location-controls {
+      margin: 20px auto;
+      padding: 10px 20px;
+      text-align: center;
+    }
+    .location-controls label {
+      color: #eeeeee;
+      font-family: Arial, Helvetica, sans-serif;
+      margin-right: 10px;
+    }
+    .location-controls input {
+      width: 100px;
+      padding: 5px;
+      font-size: 16px;
+      text-align: center;
+      background-color: #2a2a2a;
+      color: #eeeeee;
+      border: 1px solid #555;
+      border-radius: 5px;
+      margin-right: 10px;
+    }
+    .location-controls button {
+      padding: 6px 20px;
+      font-size: 16px;
+      background-color: #761f7b;
+      color: #eeeeee;
+      border: 1px solid #555;
+      border-radius: 5px;
+      cursor: pointer;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .location-controls button:hover {
+      background-color: #9525a0;
+    }
+    #api-counter {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      padding: 10px 15px;
+      background-color: #1e1e1e;
+      color: #eeeeee;
+      border: 2px solid white;
+      border-radius: 5px;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 14px;
+      z-index: 1000;
+    }
+  </style>
+  <script src="weatherapp.js"></script>
+</head>
+<body>
+  <div id="api-counter">API Calls: 0</div>
+  <h1>API Widgets</h1>
+  <div class="location-controls">
+    <label for="latitude">Latitude:</label>
+    <input type="text" id="latitude" value="30.27" />
+    <label for="longitude">Longitude:</label>
+    <input type="text" id="longitude" value="-97.74" />
+    <button id="submit-location">Update Location</button>
+  </div>
+  <div class="graph-controls">
+    <label for="min-temp-highlight">Minimum Highlight Temperature (°F):</label>
+    <input type="text" id="min-temp-highlight" value="70" maxlength="2" />
+  </div>
+  <div id="boxes" style="display: flex; flex-direction: row; justify-content: space-around">
+    <!--
+        <div style="flex: 1; display: flex; flex-direction: column" class="centered-box">
+      <div class="box-row">
+        <div style="flex: 1">o</div>
+        <div style="flex: 1; text-align: center">o</div>
+        <div style="flex: 1; text-align: right">o</div>
+      </div>
+      <div class="box-row" style="align-items: center">
+        <div style="flex: 1">o</div>
+        <div id="bikeday0">Loading...</div>
+        <div style="flex: 1; text-align: right">o</div>
+      </div>
+      <div class="box-row">
+        <div style="flex: 1">o</div>
+        <div style="flex: 1; text-align: center">o</div>
+        <div style="flex: 1; text-align: right">o</div>
+      </div>
+    </div>
+    -->
+    <div id="bikeday0" class="centered-box">Loading...</div>
+    <div id="bikeday1" class="centered-box">Loading...</div>
+    <div id="bikeday2" class="centered-box">Loading...</div>
+    <div id="bikeday3" class="centered-box">Loading...</div>
+  </div>
+  <div id="weather-graph"></div>
+</body>
+</html>
