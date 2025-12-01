@@ -1,3 +1,46 @@
+// Cookie helper functions with localStorage fallback
+function setCookie(name, value, days = 365) {
+  const date = new Date();
+  date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
+  const expires = "expires=" + date.toUTCString();
+  document.cookie = name + "=" + value + ";" + expires + ";path=/";
+
+  // Fallback to localStorage (works with file:// protocol)
+  try {
+    localStorage.setItem(name, value);
+    console.log(`Saved ${name} = ${value}`);
+  } catch (e) {
+    console.error("Error saving to localStorage:", e);
+  }
+}
+
+function getCookie(name) {
+  // Try cookie first
+  const nameEQ = name + "=";
+  const ca = document.cookie.split(";");
+  for (let i = 0; i < ca.length; i++) {
+    let c = ca[i];
+    while (c.charAt(0) === " ") c = c.substring(1, c.length);
+    if (c.indexOf(nameEQ) === 0) {
+      const value = c.substring(nameEQ.length, c.length);
+      console.log(`Loaded ${name} = ${value} from cookie`);
+      return value;
+    }
+  }
+
+  // Fallback to localStorage
+  try {
+    const value = localStorage.getItem(name);
+    if (value !== null) {
+      console.log(`Loaded ${name} = ${value} from localStorage`);
+    }
+    return value;
+  } catch (e) {
+    console.error("Error reading from localStorage:", e);
+    return null;
+  }
+}
+
 // Constants
 let DEFAULT_LOCATION = { lat: 30.27, lon: -97.74 };
 let LOCATION = DEFAULT_LOCATION;
@@ -42,6 +85,10 @@ function updateLocation(lat, lon) {
   const locationChanged = LOCATION.lat !== lat || LOCATION.lon !== lon;
 
   LOCATION = { lat, lon };
+
+  // Save latitude and longitude to cookies
+  setCookie("latitude", lat);
+  setCookie("longitude", lon);
 
   if (locationChanged) {
     weatherCache.clear();
@@ -580,11 +627,32 @@ function drawTemperatureGraph(
 }
 
 window.addEventListener("DOMContentLoaded", () => {
+  // Load saved values from cookies
+  const savedLat = getCookie("latitude");
+  const savedLon = getCookie("longitude");
+  const savedMinTemp = getCookie("minTempHighlight");
+
+  // Update input fields with saved values if they exist
+  if (savedLat !== null) {
+    document.getElementById("latitude").value = savedLat;
+    LOCATION.lat = parseFloat(savedLat);
+  }
+  if (savedLon !== null) {
+    document.getElementById("longitude").value = savedLon;
+    LOCATION.lon = parseFloat(savedLon);
+  }
+  if (savedMinTemp !== null) {
+    document.getElementById("min-temp-highlight").value = savedMinTemp;
+  }
+
+  const initialMinTemp =
+    parseInt(document.getElementById("min-temp-highlight").value) || 70;
+
   // Fetch forecasts for 4 days
   for (let i = 0; i < 4; i++) {
     fetchForecast(LOCATION.lat, LOCATION.lon, i, `#bikeday${i}`);
   }
-  fetchTemperatureGraph(LOCATION.lat, LOCATION.lon, 96, 70);
+  fetchTemperatureGraph(LOCATION.lat, LOCATION.lon, 96, initialMinTemp);
 
   // Add input event listener for minimum temperature highlight
   const minTempInput = document.getElementById("min-temp-highlight");
@@ -616,6 +684,11 @@ window.addEventListener("DOMContentLoaded", () => {
     e.target.value = e.target.value.replace(/[^0-9]/g, "");
 
     const value = parseInt(e.target.value);
+
+    // Save to cookie
+    if (!isNaN(value) && value >= 10) {
+      setCookie("minTempHighlight", value);
+    }
 
     // Only redraw if >= 10 and we have graph data
     if (!isNaN(value) && value >= 10 && currentGraphData) {
