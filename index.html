@@ -8,33 +8,6 @@
     body {
       background-color: #121212;
     }
-    h3 {
-      margin-top: 0;
-    }
-    .centered-box {
-      max-width: 400px;
-      height: 200px;
-      border-radius: 10px;
-      justify-content: center;
-      align-items: center;
-      border: 1px solid #ccc;
-      background-color: #761f7b;
-      color: #eeeeee;
-      font-family: Arial, Helvetica, sans-serif;
-      padding: 10px;
-      margin: 10px;
-      flex: 1;
-    }
-    #bikeday1, #bikeday2, #bikeday3 {
-      padding: 10px;
-    }
-    .box-row {
-      width: 100%;
-      flex: 1;
-      display: flex;
-      flex-direction: row;
-      justify-content: space-between;
-    }
     h1 {
       color: #eeeeee;
       font-family: Arial, Helvetica, sans-serif;
@@ -124,7 +97,7 @@
 </head>
 <body>
   <div id="api-counter">API Calls: 0</div>
-  <h1>API Widgets</h1>
+  <h1>Weather API Graphs</h1>
   <div class="location-controls">
     <label for="latitude">Latitude:</label>
     <input type="text" id="latitude" value="30.27" />
@@ -135,31 +108,6 @@
   <div class="graph-controls">
     <label for="min-temp-highlight">Minimum Highlight Temperature (°F):</label>
     <input type="text" id="min-temp-highlight" value="70" maxlength="2" />
-  </div>
-  <div id="boxes" style="display: flex; flex-direction: row; justify-content: space-around">
-    <!--
-        <div style="flex: 1; display: flex; flex-direction: column" class="centered-box">
-      <div class="box-row">
-        <div style="flex: 1">o</div>
-        <div style="flex: 1; text-align: center">o</div>
-        <div style="flex: 1; text-align: right">o</div>
-      </div>
-      <div class="box-row" style="align-items: center">
-        <div style="flex: 1">o</div>
-        <div id="bikeday0">Loading...</div>
-        <div style="flex: 1; text-align: right">o</div>
-      </div>
-      <div class="box-row">
-        <div style="flex: 1">o</div>
-        <div style="flex: 1; text-align: center">o</div>
-        <div style="flex: 1; text-align: right">o</div>
-      </div>
-    </div>
-    -->
-    <div id="bikeday0" class="centered-box">Loading...</div>
-    <div id="bikeday1" class="centered-box">Loading...</div>
-    <div id="bikeday2" class="centered-box">Loading...</div>
-    <div id="bikeday3" class="centered-box">Loading...</div>
   </div>
   <div id="weather-graph" class="weather-graph"></div>
   <div id="sampledata" class="weather-graph"></div>

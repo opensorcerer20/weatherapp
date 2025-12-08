@@ -94,16 +94,6 @@ function updateLocation(lat, lon) {
     weatherCache.clear();
   }
 
-  // Clear existing weather boxes
-  for (let i = 0; i < 4; i++) {
-    document.querySelector(`#bikeday${i}`).textContent = "Loading...";
-  }
-
-  // Fetch new data
-  for (let i = 0; i < 4; i++) {
-    fetchForecast(lat, lon, i, `#bikeday${i}`);
-  }
-
   const minTempInput = document.getElementById("min-temp-highlight");
   const minTemp = parseInt(minTempInput.value) || 70;
   fetchTemperatureGraph(lat, lon, 96, minTemp);
@@ -139,13 +129,31 @@ const weatherCache = {
   },
   isValid(lat, lon) {
     const cached = this._loadFromStorage();
-    if (!cached.timestamp || !cached.location) return false;
+    if (!cached.timestamp || !cached.location) {
+      console.log("Cache invalid: No timestamp or location");
+      return false;
+    }
     const now = Date.now();
     const fifteenMinutes = 15 * 60 * 1000;
     const timeValid = now - cached.timestamp < fifteenMinutes;
-    const locationMatch =
-      cached.location.lat === lat && cached.location.lon === lon;
 
+    // Use Number() to ensure proper comparison and round to avoid floating point issues
+    const latMatch = Math.abs(Number(cached.location.lat) - Number(lat)) < 0.01;
+    const lonMatch = Math.abs(Number(cached.location.lon) - Number(lon)) < 0.01;
+    const locationMatch = latMatch && lonMatch;
+
+    if (!timeValid) {
+      console.log(
+        `Cache expired (${Math.round(
+          (now - cached.timestamp) / 1000 / 60
+        )} minutes old)`
+      );
+    }
+    if (!locationMatch) {
+      console.log(
+        `Location mismatch: cached (${cached.location.lat}, ${cached.location.lon}) vs requested (${lat}, ${lon})`
+      );
+    }
     if (timeValid && locationMatch) {
       console.log(
         `Cache is valid (${Math.round(
@@ -158,39 +166,45 @@ const weatherCache = {
   },
   setForecast(data, lat, lon) {
     const cached = this._loadFromStorage();
-    if (
-      !cached.location ||
-      cached.location.lat !== lat ||
-      cached.location.lon !== lon
-    ) {
-      cached.location = { lat, lon };
-      cached.timestamp = Date.now();
-    }
+    // Always update location and timestamp when saving new data
+    cached.location = { lat, lon };
+    cached.timestamp = Date.now();
     cached.forecastData = data;
     this._saveToStorage(cached);
-    console.log("Forecast data cached");
+    console.log("Forecast data cached with new timestamp");
   },
   setTemperature(data, lat, lon) {
     const cached = this._loadFromStorage();
-    if (
-      !cached.location ||
-      cached.location.lat !== lat ||
-      cached.location.lon !== lon
-    ) {
-      cached.location = { lat, lon };
-      cached.timestamp = Date.now();
-    }
+    // Always update location and timestamp when saving new data
+    cached.location = { lat, lon };
+    cached.timestamp = Date.now();
     cached.temperatureData = data;
     this._saveToStorage(cached);
-    console.log("Temperature data cached");
+    console.log("Temperature data cached with new timestamp");
   },
   getForecast(lat, lon) {
-    if (!this.isValid(lat, lon)) return null;
+    if (!this.isValid(lat, lon)) {
+      // Clear expired cache as a safeguard
+      const cached = this._loadFromStorage();
+      if (cached.timestamp) {
+        console.log("Clearing expired/invalid cache");
+        this.clear();
+      }
+      return null;
+    }
     const cached = this._loadFromStorage();
     return cached.forecastData;
   },
   getTemperature(lat, lon) {
-    if (!this.isValid(lat, lon)) return null;
+    if (!this.isValid(lat, lon)) {
+      // Clear expired cache as a safeguard
+      const cached = this._loadFromStorage();
+      if (cached.timestamp) {
+        console.log("Clearing expired/invalid cache");
+        this.clear();
+      }
+      return null;
+    }
     const cached = this._loadFromStorage();
     return cached.temperatureData;
   },
@@ -232,125 +246,6 @@ function degreeToDirection(degrees) {
     }
   }
   throw new Error("could not determine direction");
-}
-
-async function fetchForecast(
-  latitude,
-  longitude,
-  daysFromNow,
-  elementSelector
-) {
-  // Check cache first
-  const cachedData = weatherCache.getForecast(latitude, longitude);
-  let data;
-
-  if (cachedData) {
-    console.log("Using cached forecast data");
-    data = cachedData;
-  } else {
-    console.log("Fetching fresh forecast data");
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America/Chicago`;
-
-    try {
-      incrementApiCounter();
-      const response = await fetch(url);
-      data = await response.json();
-
-      // Store in cache
-      weatherCache.setForecast(data, latitude, longitude);
-    } catch (error) {
-      console.error("Error fetching forecast:", error);
-      document.querySelector(elementSelector).textContent = "Error loading";
-      return;
-    }
-  }
-
-  try {
-    const now = new Date();
-    const targetDate = new Date(now);
-    targetDate.setDate(targetDate.getDate() + daysFromNow);
-
-    // Get forecasts for 3pm, 4pm, and 5pm
-    const hours = [15, 16, 17];
-    const forecasts = hours
-      .map((hour) => {
-        const time = new Date(targetDate);
-        time.setHours(hour, 0, 0, 0);
-        const targetTime = formatDateForAPI(time);
-
-        const index = data.hourly.time.indexOf(targetTime);
-
-        if (index !== -1) {
-          return {
-            hour: hour > 12 ? hour - 12 : hour,
-            period: "pm",
-            temp: data.hourly.temperature_2m[index],
-            //temp: 80,
-            windSpeed: data.hourly.wind_speed_10m[index],
-            windDirection: degreeToDirection(
-              data.hourly.wind_direction_10m[index]
-            ),
-            cloudCover: data.hourly.cloud_cover[index],
-          };
-        }
-        return null;
-      })
-      .filter((f) => f !== null);
-
-    if (forecasts.length > 0) {
-      // Get day of week name
-      const dayLabel = DAYS_OF_WEEK[targetDate.getDay()];
-
-      const forecastLines = forecasts
-        .map(
-          (f) =>
-            `<div>${f.hour}${f.period}: ${f.temp}°F, wind ${f.windSpeed} mph ${f.windDirection}, clouds: ${f.cloudCover}%</div>`
-        )
-        .join("");
-
-      // Calculate average temperature
-      const avgTemp =
-        forecasts.reduce((sum, f) => sum + f.temp, 0) / forecasts.length;
-      const tempCheck = avgTemp >= 75 ? "yes" : "no";
-
-      // Calculate average cloud cover
-      const avgCloudCover =
-        forecasts.reduce((sum, f) => sum + f.cloudCover, 0) / forecasts.length;
-      const sunCheck = avgCloudCover < 50 ? "yes" : "no";
-
-      // Change background and text color based on conditions
-      const element = document.querySelector(elementSelector);
-      if (tempCheck === "yes" && sunCheck === "yes") {
-        element.style.backgroundColor = "#ebe834";
-        element.style.color = "#121212";
-      } else if (tempCheck === "no" && sunCheck === "no") {
-        element.style.backgroundColor = "#aaaaaa";
-        element.style.color = "#121212";
-      } else if (tempCheck === "yes" && sunCheck === "no") {
-        element.style.backgroundColor = "#a17a48";
-        element.style.color = "#121212";
-      } else {
-        element.style.backgroundColor = "#761f7b";
-        element.style.color = "#eeeeee";
-      }
-
-      element.innerHTML = `
-        <div>
-          <h3>${dayLabel}</h3>
-          ${forecastLines}
-          <div>&nbsp;</div>
-          <div>temperature? ${tempCheck}</div>
-          <div>sun? ${sunCheck}</div>
-        </div>
-      `;
-    } else {
-      document.querySelector(elementSelector).textContent =
-        "Data not available";
-    }
-  } catch (error) {
-    console.error("Error processing forecast:", error);
-    document.querySelector(elementSelector).textContent = "Error loading";
-  }
 }
 
 async function fetchTemperatureGraph(
@@ -713,10 +608,6 @@ window.addEventListener("DOMContentLoaded", () => {
   const initialMinTemp =
     parseInt(document.getElementById("min-temp-highlight").value) || 70;
 
-  // Fetch forecasts for 4 days
-  for (let i = 0; i < 4; i++) {
-    fetchForecast(LOCATION.lat, LOCATION.lon, i, `#bikeday${i}`);
-  }
   fetchTemperatureGraph(LOCATION.lat, LOCATION.lon, 96, initialMinTemp);
 
   // Add input event listener for minimum temperature highlight
