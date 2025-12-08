@@ -14,7 +14,7 @@ Open-Meteo requires longitude and latitude, so I included a couple of form field
 
 I did originally make some weather tiles for each day, but wanted to see the conditions in a graph so I could better gauge conditions.
 
-Here is the graph using sample data to show off what it does in varied situations:
+Here is the graph using sample data to show off what it does in varied situations. Note that for wind speed, I omitted axis labels since 3 were already in use; it goes from 0 to 20 mph:
 
 <img width="1288" height="466" alt="Screenshot 2025-12-08 at 10 10 03" src="https://github.com/user-attachments/assets/20cb7271-fded-4fd3-836e-65ee2fa17f53" />
 
