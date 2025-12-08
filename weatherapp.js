@@ -112,54 +112,96 @@ function updateLocation(lat, lon) {
 // Global variable to store current graph data for redrawing
 let currentGraphData = null;
 
-// Cache for weather data with 15-minute expiration
+// Cache for weather data with 15-minute expiration using localStorage
 const weatherCache = {
-  forecastData: null,
-  temperatureData: null,
-  timestamp: null,
-  location: null,
+  _loadFromStorage() {
+    try {
+      const cached = localStorage.getItem("weatherCache");
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (e) {
+      console.error("Error loading cache from localStorage:", e);
+    }
+    return {
+      forecastData: null,
+      temperatureData: null,
+      timestamp: null,
+      location: null,
+    };
+  },
+  _saveToStorage(data) {
+    try {
+      localStorage.setItem("weatherCache", JSON.stringify(data));
+    } catch (e) {
+      console.error("Error saving cache to localStorage:", e);
+    }
+  },
   isValid(lat, lon) {
-    if (!this.timestamp || !this.location) return false;
+    const cached = this._loadFromStorage();
+    if (!cached.timestamp || !cached.location) return false;
     const now = Date.now();
     const fifteenMinutes = 15 * 60 * 1000;
-    const timeValid = now - this.timestamp < fifteenMinutes;
+    const timeValid = now - cached.timestamp < fifteenMinutes;
     const locationMatch =
-      this.location.lat === lat && this.location.lon === lon;
+      cached.location.lat === lat && cached.location.lon === lon;
+
+    if (timeValid && locationMatch) {
+      console.log(
+        `Cache is valid (${Math.round(
+          (fifteenMinutes - (now - cached.timestamp)) / 1000 / 60
+        )} minutes remaining)`
+      );
+    }
+
     return timeValid && locationMatch;
   },
   setForecast(data, lat, lon) {
+    const cached = this._loadFromStorage();
     if (
-      !this.location ||
-      this.location.lat !== lat ||
-      this.location.lon !== lon
+      !cached.location ||
+      cached.location.lat !== lat ||
+      cached.location.lon !== lon
     ) {
-      this.location = { lat, lon };
-      this.timestamp = Date.now();
+      cached.location = { lat, lon };
+      cached.timestamp = Date.now();
     }
-    this.forecastData = data;
+    cached.forecastData = data;
+    this._saveToStorage(cached);
+    console.log("Forecast data cached");
   },
   setTemperature(data, lat, lon) {
+    const cached = this._loadFromStorage();
     if (
-      !this.location ||
-      this.location.lat !== lat ||
-      this.location.lon !== lon
+      !cached.location ||
+      cached.location.lat !== lat ||
+      cached.location.lon !== lon
     ) {
-      this.location = { lat, lon };
-      this.timestamp = Date.now();
+      cached.location = { lat, lon };
+      cached.timestamp = Date.now();
     }
-    this.temperatureData = data;
+    cached.temperatureData = data;
+    this._saveToStorage(cached);
+    console.log("Temperature data cached");
   },
   getForecast(lat, lon) {
-    return this.isValid(lat, lon) ? this.forecastData : null;
+    if (!this.isValid(lat, lon)) return null;
+    const cached = this._loadFromStorage();
+    return cached.forecastData;
   },
   getTemperature(lat, lon) {
-    return this.isValid(lat, lon) ? this.temperatureData : null;
+    if (!this.isValid(lat, lon)) return null;
+    const cached = this._loadFromStorage();
+    return cached.temperatureData;
   },
   clear() {
-    this.forecastData = null;
-    this.temperatureData = null;
-    this.timestamp = null;
-    this.location = null;
+    this._saveToStorage({
+      forecastData: null,
+      temperatureData: null,
+      timestamp: null,
+      location: null,
+    });
+    console.log("Weather cache cleared");
   },
 };
 
@@ -376,14 +418,26 @@ async function fetchTemperatureGraph(
       currentGraphData = { times, temps, cloudCover, precipProb, windSpeed };
 
       // Create the graph
-      drawTemperatureGraph(
+      drawTemperatureGraph({
+        divId: "#weather-graph",
         times,
         temps,
         cloudCover,
         precipProb,
         windSpeed,
-        minTempHighlight
-      );
+        minTempHighlight,
+      });
+
+      // draw second graph using sample data
+      if (sampleData) {
+        drawTemperatureGraph({
+          divId: "#sampledata",
+          ...sampleData,
+          minTempHighlight,
+        });
+      } else {
+        console.log("missing sample data");
+      }
     } else {
       document.querySelector("#weather-graph").textContent =
         "Graph data not available";
@@ -395,16 +449,19 @@ async function fetchTemperatureGraph(
   }
 }
 
-function drawTemperatureGraph(
+function drawTemperatureGraph({
+  divId,
   times,
   temps,
   cloudCover,
   precipProb,
   windSpeed,
-  minTempHighlight
-) {
-  // Clear existing canvas
-  const graphContainer = document.querySelector("#weather-graph");
+  minTempHighlight,
+}) {
+  const maxCloudCover = 80;
+  const maxWind = 17;
+  const maxPrecip = 40;
+  const graphContainer = document.querySelector(divId);
   graphContainer.innerHTML = "";
 
   const canvas = document.createElement("canvas");
@@ -459,13 +516,21 @@ function drawTemperatureGraph(
     const x = padding + (graphWidth / (dataPoints - 1)) * i;
     const width = i < dataPoints - 1 ? graphWidth / (dataPoints - 1) : 0;
 
-    if (precipProb[i] > 30) {
+    if (precipProb[i] > maxPrecip) {
       // Draw grey highlight for high precipitation
-      ctx.fillStyle = "rgba(128, 128, 128, 0.3)";
+      ctx.fillStyle = GRAPH_COLORS.precip + "33";
+      ctx.fillRect(x - width / 2, padding, width, graphHeight);
+    } else if (windSpeed[i] > maxWind) {
+      // Draw grey highlight for high precipitation
+      ctx.fillStyle = GRAPH_COLORS.wind + "33";
+      ctx.fillRect(x - width / 2, padding, width, graphHeight);
+    } else if (cloudCover[i] > maxCloudCover) {
+      // Draw grey highlight for high precipitation
+      ctx.fillStyle = GRAPH_COLORS.cloud + "33";
       ctx.fillRect(x - width / 2, padding, width, graphHeight);
     } else if (temp > minTempHighlight) {
       // Draw orange highlight for high temperature (only if precip is low)
-      ctx.fillStyle = "rgba(255, 165, 0, 0.3)";
+      ctx.fillStyle = GRAPH_COLORS.temp + "33";
       ctx.fillRect(x - width / 2, padding, width, graphHeight);
     }
   });
@@ -692,14 +757,11 @@ window.addEventListener("DOMContentLoaded", () => {
 
     // Only redraw if >= 10 and we have graph data
     if (!isNaN(value) && value >= 10 && currentGraphData) {
-      drawTemperatureGraph(
-        currentGraphData.times,
-        currentGraphData.temps,
-        currentGraphData.cloudCover,
-        currentGraphData.precipProb,
-        currentGraphData.windSpeed,
-        value
-      );
+      drawTemperatureGraph({
+        divId: "#weather-graph",
+        ...currentGraphData,
+        minTempHighlight: value,
+      });
     }
   });
 
@@ -716,3 +778,271 @@ window.addEventListener("DOMContentLoaded", () => {
     fetchTemperatureGraph(currentLat, currentLon, 96, currentMinTemp);
   }, 60 * 60 * 1000);
 });
+
+const sampleData_orig = {
+  times: [
+    "2025-12-08T03:00",
+    "2025-12-08T04:00",
+    "2025-12-08T05:00",
+    "2025-12-08T06:00",
+    "2025-12-08T07:00",
+    "2025-12-08T08:00",
+    "2025-12-08T09:00",
+    "2025-12-08T10:00",
+    "2025-12-08T11:00",
+    "2025-12-08T12:00",
+    "2025-12-08T13:00",
+    "2025-12-08T14:00",
+    "2025-12-08T15:00",
+    "2025-12-08T16:00",
+    "2025-12-08T17:00",
+    "2025-12-08T18:00",
+    "2025-12-08T19:00",
+    "2025-12-08T20:00",
+    "2025-12-08T21:00",
+    "2025-12-08T22:00",
+    "2025-12-08T23:00",
+    "2025-12-09T00:00",
+    "2025-12-09T01:00",
+    "2025-12-09T02:00",
+    "2025-12-09T03:00",
+    "2025-12-09T04:00",
+    "2025-12-09T05:00",
+    "2025-12-09T06:00",
+    "2025-12-09T07:00",
+    "2025-12-09T08:00",
+    "2025-12-09T09:00",
+    "2025-12-09T10:00",
+    "2025-12-09T11:00",
+    "2025-12-09T12:00",
+    "2025-12-09T13:00",
+    "2025-12-09T14:00",
+    "2025-12-09T15:00",
+    "2025-12-09T16:00",
+    "2025-12-09T17:00",
+    "2025-12-09T18:00",
+    "2025-12-09T19:00",
+    "2025-12-09T20:00",
+    "2025-12-09T21:00",
+    "2025-12-09T22:00",
+    "2025-12-09T23:00",
+    "2025-12-10T00:00",
+    "2025-12-10T01:00",
+    "2025-12-10T02:00",
+    "2025-12-10T03:00",
+    "2025-12-10T04:00",
+    "2025-12-10T05:00",
+    "2025-12-10T06:00",
+    "2025-12-10T07:00",
+    "2025-12-10T08:00",
+    "2025-12-10T09:00",
+    "2025-12-10T10:00",
+    "2025-12-10T11:00",
+    "2025-12-10T12:00",
+    "2025-12-10T13:00",
+    "2025-12-10T14:00",
+    "2025-12-10T15:00",
+    "2025-12-10T16:00",
+    "2025-12-10T17:00",
+    "2025-12-10T18:00",
+    "2025-12-10T19:00",
+    "2025-12-10T20:00",
+    "2025-12-10T21:00",
+    "2025-12-10T22:00",
+    "2025-12-10T23:00",
+    "2025-12-11T00:00",
+    "2025-12-11T01:00",
+    "2025-12-11T02:00",
+    "2025-12-11T03:00",
+    "2025-12-11T04:00",
+    "2025-12-11T05:00",
+    "2025-12-11T06:00",
+    "2025-12-11T07:00",
+    "2025-12-11T08:00",
+    "2025-12-11T09:00",
+    "2025-12-11T10:00",
+    "2025-12-11T11:00",
+    "2025-12-11T12:00",
+    "2025-12-11T13:00",
+    "2025-12-11T14:00",
+    "2025-12-11T15:00",
+    "2025-12-11T16:00",
+    "2025-12-11T17:00",
+    "2025-12-11T18:00",
+    "2025-12-11T19:00",
+    "2025-12-11T20:00",
+    "2025-12-11T21:00",
+    "2025-12-11T22:00",
+    "2025-12-11T23:00",
+    "2025-12-12T00:00",
+    "2025-12-12T01:00",
+    "2025-12-12T02:00",
+  ],
+  temps: [
+    45.4, 44.1, 42.8, 41.4, 40.3, 41.6, 45, 48.9, 53.2, 56.9, 59.4, 60.5, 80.7,
+    59.8, 57.5, 51.3, 48.1, 45, 42.9, 41.3, 40, 39.1, 38.2, 37.2, 36.1, 35.5,
+    35.1, 35, 34.6, 35.5, 42.9, 48.7, 54.3, 58.3, 61.6, 63.8, 65.1, 64.9, 62.1,
+    55.4, 52.1, 49.7, 48.6, 48.2, 48.2, 49.1, 50.3, 50, 49.9, 49.7, 49.3, 49.4,
+    49.3, 50.9, 56.5, 61.9, 66.6, 70.7, 74.2, 76, 74.6, 72, 67, 61.1, 58.6,
+    57.5, 55.7, 53.7, 52.3, 51.1, 50, 49.1, 48.4, 48, 47.1, 46.5, 46, 47.8,
+    52.4, 56.8, 60.6, 63.7, 66.2, 68.2, 69.1, 69.3, 66.2, 61.7, 59.9, 58.8,
+    58.1, 57.4, 57, 56.6, 56.5, 56.7,
+  ],
+  cloudCover: [
+    0, 0, 0, 2, 1, 2, 3, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
+    1, 2, 2, 3, 3, 7, 4, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 5, 7, 100, 100, 100, 7, 100, 7, 7,
+    11, 21, 100, 100, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  ],
+  precipProb: [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  ],
+  windSpeed: [
+    13.1, 13.5, 12.3, 9.7, 10.9, 11.6, 13, 13.5, 13.6, 12.5, 12.1, 11.5, 10.8,
+    10, 7.7, 6.2, 6.8, 5.8, 4.3, 1.8, 1.6, 2.7, 4.9, 2.6, 6.5, 3.6, 3.2, 4.4,
+    6.8, 5.2, 2, 5.5, 9.4, 10.5, 11.7, 11.7, 11.8, 11.3, 9.8, 8, 7.4, 6, 8.1,
+    7.8, 7.9, 8.5, 8.7, 8.1, 8.4, 8.4, 7.3, 8, 7.1, 7.8, 9, 8.5, 6.5, 6.3, 5.8,
+    9.1, 13.5, 14.5, 14.2, 11.4, 10.9, 12.5, 10.7, 9.6, 9.1, 8.9, 7.4, 7.4, 6.1,
+    6.6, 7.4, 6.1, 5.4, 4.4, 5, 5.5, 3.4, 3.3, 5.4, 6.7, 7.7, 8.3, 6.5, 7.4,
+    7.2, 7.9, 7.4, 7.4, 6.9, 7.1, 6.7, 5.9,
+  ],
+  minTempHighlight: 70,
+};
+
+const sampleData = {
+  times: [
+    "2025-12-08T03:00",
+    "2025-12-08T04:00",
+    "2025-12-08T05:00",
+    "2025-12-08T06:00",
+    "2025-12-08T07:00",
+    "2025-12-08T08:00",
+    "2025-12-08T09:00",
+    "2025-12-08T10:00",
+    "2025-12-08T11:00",
+    "2025-12-08T12:00",
+    "2025-12-08T13:00",
+    "2025-12-08T14:00",
+    "2025-12-08T15:00",
+    "2025-12-08T16:00",
+    "2025-12-08T17:00",
+    "2025-12-08T18:00",
+    "2025-12-08T19:00",
+    "2025-12-08T20:00",
+    "2025-12-08T21:00",
+    "2025-12-08T22:00",
+    "2025-12-08T23:00",
+    "2025-12-09T00:00",
+    "2025-12-09T01:00",
+    "2025-12-09T02:00",
+    "2025-12-09T03:00",
+    "2025-12-09T04:00",
+    "2025-12-09T05:00",
+    "2025-12-09T06:00",
+    "2025-12-09T07:00",
+    "2025-12-09T08:00",
+    "2025-12-09T09:00",
+    "2025-12-09T10:00",
+    "2025-12-09T11:00",
+    "2025-12-09T12:00",
+    "2025-12-09T13:00",
+    "2025-12-09T14:00",
+    "2025-12-09T15:00",
+    "2025-12-09T16:00",
+    "2025-12-09T17:00",
+    "2025-12-09T18:00",
+    "2025-12-09T19:00",
+    "2025-12-09T20:00",
+    "2025-12-09T21:00",
+    "2025-12-09T22:00",
+    "2025-12-09T23:00",
+    "2025-12-10T00:00",
+    "2025-12-10T01:00",
+    "2025-12-10T02:00",
+    "2025-12-10T03:00",
+    "2025-12-10T04:00",
+    "2025-12-10T05:00",
+    "2025-12-10T06:00",
+    "2025-12-10T07:00",
+    "2025-12-10T08:00",
+    "2025-12-10T09:00",
+    "2025-12-10T10:00",
+    "2025-12-10T11:00",
+    "2025-12-10T12:00",
+    "2025-12-10T13:00",
+    "2025-12-10T14:00",
+    "2025-12-10T15:00",
+    "2025-12-10T16:00",
+    "2025-12-10T17:00",
+    "2025-12-10T18:00",
+    "2025-12-10T19:00",
+    "2025-12-10T20:00",
+    "2025-12-10T21:00",
+    "2025-12-10T22:00",
+    "2025-12-10T23:00",
+    "2025-12-11T00:00",
+    "2025-12-11T01:00",
+    "2025-12-11T02:00",
+    "2025-12-11T03:00",
+    "2025-12-11T04:00",
+    "2025-12-11T05:00",
+    "2025-12-11T06:00",
+    "2025-12-11T07:00",
+    "2025-12-11T08:00",
+    "2025-12-11T09:00",
+    "2025-12-11T10:00",
+    "2025-12-11T11:00",
+    "2025-12-11T12:00",
+    "2025-12-11T13:00",
+    "2025-12-11T14:00",
+    "2025-12-11T15:00",
+    "2025-12-11T16:00",
+    "2025-12-11T17:00",
+    "2025-12-11T18:00",
+    "2025-12-11T19:00",
+    "2025-12-11T20:00",
+    "2025-12-11T21:00",
+    "2025-12-11T22:00",
+    "2025-12-11T23:00",
+    "2025-12-12T00:00",
+    "2025-12-12T01:00",
+    "2025-12-12T02:00",
+  ],
+  temps: [
+    45.0, 45.65, 47.55, 50.56, 54.45, 58.94, 63.69, 68.36, 72.59, 76.07, 78.55,
+    79.84, 79.84, 78.55, 76.07, 72.59, 68.36, 63.69, 58.94, 54.45, 50.56, 47.55,
+    45.65, 45.0, 45.0, 45.65, 47.55, 50.56, 54.45, 58.94, 63.69, 68.36, 72.59,
+    76.07, 78.55, 79.84, 79.84, 78.55, 76.07, 72.59, 68.36, 63.69, 58.94, 54.45,
+    50.56, 47.55, 45.65, 45.0, 45.0, 45.65, 47.55, 50.56, 54.45, 58.94, 63.69,
+    68.36, 72.59, 76.07, 78.55, 79.84, 79.84, 78.55, 76.07, 72.59, 68.36, 63.69,
+    58.94, 54.45, 50.56, 47.55, 45.65, 45.0, 45.0, 45.65, 47.55, 50.56, 54.45,
+    58.94, 63.69, 68.36, 72.59, 76.07, 78.55, 79.84, 79.84, 78.55, 76.07, 72.59,
+    68.36, 63.69, 58.94, 54.45, 50.56, 47.55, 45.65, 45.0,
+  ],
+  cloudCover: [
+    0, 0, 0, 2, 1, 2, 3, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0.0,
+    1.85, 7.28, 15.87, 27.0, 39.83, 53.41, 66.74, 78.83, 88.79, 95.86, 99.53,
+    99.53, 95.86, 88.79, 78.83, 66.74, 53.41, 39.83, 27.0, 15.87, 7.28, 1.85,
+    0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 5, 7, 0, 0, 0, 7, 0, 7,
+    0, 11, 21, 0, 0, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  ],
+  precipProb: [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0,
+    1.85, 7.28, 15.87, 27.0, 39.83, 53.41, 66.74, 78.83, 88.79, 95.86, 99.53,
+    99.53, 95.86, 88.79, 78.83, 66.74, 53.41, 39.83, 27.0, 15.87, 7.28, 1.85,
+    0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  ],
+  windSpeed: [
+    5, 13.5, 12.3, 9.7, 10.9, 11.6, 13, 13.5, 13.6, 12.5, 12.1, 11.5, 10, 10,
+    7.7, 6.2, 6.8, 5.8, 4.3, 1.8, 1.6, 2.7, 4.9, 2.6, 5, 3.6, 3.2, 4.4, 6.8,
+    5.2, 2, 5.5, 9.4, 10.5, 11.7, 11.7, 10, 11.3, 9.8, 8, 7.4, 6, 8.1, 7.8, 7.9,
+    8.5, 8.7, 8.1, 5, 8.4, 7.3, 8, 7.1, 7.8, 9, 8.5, 6.5, 6.3, 5.8, 9.1, 10,
+    14.5, 14.2, 11.4, 10.9, 12.5, 10.7, 9.6, 9.1, 8.9, 7.4, 7.4, 0.0, 0.5, 1.8,
+    4.0, 6.7, 10.0, 13.4, 16.7, 19.7, 22.2, 24.0, 24.9, 24.9, 24.0, 22.2, 19.7,
+    16.7, 13.4, 10.0, 6.7, 4.0, 1.8, 0.5, 0.0,
+  ],
+};
