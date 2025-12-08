@@ -10,6 +10,8 @@ My conditions are:
 
 Open-Meteo requires longitude and latitude, so I included a couple of form fields to change the values as needed. I also included a field for minimum "OK" temperature.
 
+<img width="729" height="201" alt="Screenshot 2025-12-08 at 10 30 07" src="https://github.com/user-attachments/assets/e7e208a1-0bd8-41ee-a129-bdd72b18d5b5" />
+
 I did originally make some weather tiles for each day, but wanted to see the conditions in a graph so I could better gauge conditions.
 
 Here is the graph using sample data to show off what it does in varied situations:
