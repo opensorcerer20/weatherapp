@@ -357,12 +357,17 @@ function drawTemperatureGraph({
   const maxWind = 17;
   const maxPrecip = 40;
   const graphContainer = document.querySelector(divId);
-  graphContainer.innerHTML = "";
+
+  // Remove only the canvas, preserve controls div
+  const existingCanvas = graphContainer.querySelector("canvas");
+  if (existingCanvas) {
+    existingCanvas.remove();
+  }
 
   const canvas = document.createElement("canvas");
   canvas.width = 1200;
   canvas.height = 400;
-  graphContainer.appendChild(canvas);
+  graphContainer.insertBefore(canvas, graphContainer.firstChild);
 
   const ctx = canvas.getContext("2d");
   const padding = 40;
@@ -406,27 +411,59 @@ function drawTemperatureGraph({
     ctx.fillText(Math.round(percent) + "%", canvas.width - padding + 5, y + 4);
   }
 
-  // Draw highlights for precipitation and temperature
-  temps.forEach((temp, i) => {
+  // Helper: get per-graph toggle flag name
+  function flagEnabled(metric) {
+    const isWeather = divId === "#weather-graph";
+    const graphKey = isWeather ? "WeatherGraph" : "SampleData";
+    const flagName = `${metric}HighlightEnabled${graphKey}`;
+    return window[flagName] !== false;
+  }
+
+  // Draw highlights using config to reduce repetition
+  const highlightConfig = [
+    {
+      metric: "rain",
+      enabled: () => flagEnabled("rain"),
+      valueAt: (i) => precipProb[i],
+      threshold: maxPrecip,
+      color: GRAPH_COLORS.precip,
+      compare: (v, t) => v > t,
+    },
+    {
+      metric: "wind",
+      enabled: () => flagEnabled("wind"),
+      valueAt: (i) => windSpeed[i],
+      threshold: maxWind,
+      color: GRAPH_COLORS.wind,
+      compare: (v, t) => v > t,
+    },
+    {
+      metric: "cloud",
+      enabled: () => flagEnabled("cloud"),
+      valueAt: (i) => cloudCover[i],
+      threshold: maxCloudCover,
+      color: GRAPH_COLORS.cloud,
+      compare: (v, t) => v > t,
+    },
+    {
+      metric: "temp",
+      enabled: () => flagEnabled("temp"),
+      valueAt: (i) => temps[i],
+      threshold: minTempHighlight,
+      color: GRAPH_COLORS.temp,
+      compare: (v, t) => v > t,
+    },
+  ];
+
+  temps.forEach((_, i) => {
     const x = padding + (graphWidth / (dataPoints - 1)) * i;
     const width = i < dataPoints - 1 ? graphWidth / (dataPoints - 1) : 0;
-
-    if (precipProb[i] > maxPrecip) {
-      // Draw grey highlight for high precipitation
-      ctx.fillStyle = GRAPH_COLORS.precip + "33";
-      ctx.fillRect(x - width / 2, padding, width, graphHeight);
-    } else if (windSpeed[i] > maxWind) {
-      // Draw grey highlight for high precipitation
-      ctx.fillStyle = GRAPH_COLORS.wind + "33";
-      ctx.fillRect(x - width / 2, padding, width, graphHeight);
-    } else if (cloudCover[i] > maxCloudCover) {
-      // Draw grey highlight for high precipitation
-      ctx.fillStyle = GRAPH_COLORS.cloud + "33";
-      ctx.fillRect(x - width / 2, padding, width, graphHeight);
-    } else if (temp > minTempHighlight) {
-      // Draw orange highlight for high temperature (only if precip is low)
-      ctx.fillStyle = GRAPH_COLORS.temp + "33";
-      ctx.fillRect(x - width / 2, padding, width, graphHeight);
+    for (const cfg of highlightConfig) {
+      if (cfg.enabled() && cfg.compare(cfg.valueAt(i), cfg.threshold)) {
+        ctx.fillStyle = cfg.color + "33";
+        ctx.fillRect(x - width / 2, padding, width, graphHeight);
+        break; // only one highlight per column
+      }
     }
   });
 
@@ -464,34 +501,49 @@ function drawTemperatureGraph({
     ctx.stroke();
   }
 
-  // Draw cloud cover line
-  drawLine(
-    cloudCover,
-    GRAPH_COLORS.cloud,
-    (cloud) => padding + graphHeight - (cloud / 100) * graphHeight
-  );
+  // Determine per-metric line toggles
+  function getLineEnabled(metric) {
+    const isWeather = divId === "#weather-graph";
+    const key = isWeather ? "WeatherGraph" : "SampleData";
+    return window[`${metric}LineEnabled${key}`] !== false;
+  }
+  const tempLineEnabled = getLineEnabled("temp");
 
-  // Draw precipitation probability line
-  drawLine(
-    precipProb,
-    GRAPH_COLORS.precip,
-    (precip) => padding + graphHeight - (precip / 100) * graphHeight
-  );
+  // Config-driven line drawing
+  const lineConfigs = [
+    {
+      data: cloudCover,
+      color: GRAPH_COLORS.cloud,
+      scale: (cloud) => padding + graphHeight - (cloud / 100) * graphHeight,
+      enabled: getLineEnabled("cloud"),
+    },
+    {
+      data: precipProb,
+      color: GRAPH_COLORS.precip,
+      scale: (precip) => padding + graphHeight - (precip / 100) * graphHeight,
+      enabled: getLineEnabled("precip"),
+    },
+    {
+      data: temps,
+      color: GRAPH_COLORS.temp,
+      scale: (temp) =>
+        padding + graphHeight - ((temp - minTemp) / tempRange) * graphHeight,
+      enabled: tempLineEnabled,
+    },
+    {
+      data: windSpeed,
+      color: GRAPH_COLORS.wind,
+      scale: (wind) =>
+        padding + graphHeight - (Math.min(wind, 20) / 20) * graphHeight,
+      enabled: getLineEnabled("wind"),
+    },
+  ];
 
-  // Draw temperature line
-  drawLine(
-    temps,
-    GRAPH_COLORS.temp,
-    (temp) =>
-      padding + graphHeight - ((temp - minTemp) / tempRange) * graphHeight
-  );
-
-  // Draw wind speed line (scaled 0-20 mph)
-  drawLine(
-    windSpeed,
-    GRAPH_COLORS.wind,
-    (wind) => padding + graphHeight - (Math.min(wind, 20) / 20) * graphHeight
-  );
+  lineConfigs.forEach((cfg) => {
+    if (cfg.enabled) {
+      drawLine(cfg.data, cfg.color, cfg.scale);
+    }
+  });
 
   // Helper function to draw points at specified hours
   function drawPointsAtHours(data, color, scaleFunction) {
@@ -509,34 +561,41 @@ function drawTemperatureGraph({
     });
   }
 
-  // Draw points on cloud cover line (at midnight, 3am, 6am, etc.)
-  drawPointsAtHours(
-    cloudCover,
-    GRAPH_COLORS.cloud,
-    (cloud) => padding + graphHeight - (cloud / 100) * graphHeight
-  );
+  // Config-driven points drawing at 3-hour intervals
+  const pointConfigs = [
+    {
+      data: cloudCover,
+      color: GRAPH_COLORS.cloud,
+      scale: (cloud) => padding + graphHeight - (cloud / 100) * graphHeight,
+      enabled: getLineEnabled("cloud"),
+    },
+    {
+      data: precipProb,
+      color: GRAPH_COLORS.precip,
+      scale: (precip) => padding + graphHeight - (precip / 100) * graphHeight,
+      enabled: getLineEnabled("precip"),
+    },
+    {
+      data: temps,
+      color: GRAPH_COLORS.temp,
+      scale: (temp) =>
+        padding + graphHeight - ((temp - minTemp) / tempRange) * graphHeight,
+      enabled: tempLineEnabled,
+    },
+    {
+      data: windSpeed,
+      color: GRAPH_COLORS.wind,
+      scale: (wind) =>
+        padding + graphHeight - (Math.min(wind, 20) / 20) * graphHeight,
+      enabled: getLineEnabled("wind"),
+    },
+  ];
 
-  // Draw points on precipitation line (at midnight, 3am, 6am, etc.)
-  drawPointsAtHours(
-    precipProb,
-    GRAPH_COLORS.precip,
-    (precip) => padding + graphHeight - (precip / 100) * graphHeight
-  );
-
-  // Draw points on temperature line (at midnight, 3am, 6am, etc.)
-  drawPointsAtHours(
-    temps,
-    GRAPH_COLORS.temp,
-    (temp) =>
-      padding + graphHeight - ((temp - minTemp) / tempRange) * graphHeight
-  );
-
-  // Draw points on wind speed line (at midnight, 3am, 6am, etc.)
-  drawPointsAtHours(
-    windSpeed,
-    GRAPH_COLORS.wind,
-    (wind) => padding + graphHeight - (Math.min(wind, 20) / 20) * graphHeight
-  );
+  pointConfigs.forEach((cfg) => {
+    if (cfg.enabled) {
+      drawPointsAtHours(cfg.data, cfg.color, cfg.scale);
+    }
+  });
 
   // Draw time labels at midnight, 6am, 12pm, and 6pm
   temps.forEach((temp, i) => {
@@ -584,9 +643,155 @@ function drawTemperatureGraph({
     ctx.fillStyle = "#eeeeee";
     ctx.fillText(item.label, x + 25, legendY + 4);
   });
+
+  // Save latest data per graph for generic redraws
+  try {
+    const idName = divId.startsWith("#") ? divId.slice(1) : divId;
+    window.graphDataById = window.graphDataById || {};
+    window.graphDataById[idName] = {
+      times,
+      temps,
+      cloudCover,
+      precipProb,
+      windSpeed,
+      minTempHighlight,
+    };
+  } catch (e) {
+    console.error("Error saving graph data:", e);
+  }
 }
 
 window.addEventListener("DOMContentLoaded", () => {
+  // Helper to redraw a graph with current minTemp
+  function redraw(divId, dataSource) {
+    const minTemp =
+      parseInt(document.getElementById("min-temp-highlight").value) || 70;
+    drawTemperatureGraph({ divId, ...dataSource, minTempHighlight: minTemp });
+  }
+
+  // Function to generate checkbox controls for a graph
+  function createGraphControls(graphContainer) {
+    const controlsContainer = graphContainer.querySelector(".controls");
+    if (!controlsContainer) return;
+    const graphId = graphContainer.id;
+
+    // Highlights row
+    const highlightsDiv = document.createElement("div");
+    highlightsDiv.style.cssText =
+      "text-align:center; margin: 10px auto 30px auto; max-width:1200px;";
+
+    const highlights = [
+      { id: "temp-highlight", label: "Temperature Highlight" },
+      { id: "cloud-highlight", label: "Cloud Highlight" },
+      { id: "wind-highlight", label: "Wind Highlight" },
+      { id: "rain-highlight", label: "Rain Highlight" },
+    ];
+
+    highlights.forEach((item, index) => {
+      const label = document.createElement("label");
+      label.style.cssText =
+        "color:#eeeeee; font-family:Arial, Helvetica, sans-serif;" +
+        (index < highlights.length - 1 ? " margin-right: 24px;" : "");
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.id = `toggle-${item.id}-${graphId}`;
+      checkbox.checked = true;
+      checkbox.style.cssText = "margin-right:8px;";
+
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(item.label));
+      highlightsDiv.appendChild(label);
+    });
+
+    controlsContainer.appendChild(highlightsDiv);
+
+    // Line visibility row
+    const linesDiv = document.createElement("div");
+    linesDiv.style.cssText =
+      "text-align:center; margin: 10px auto 30px auto; max-width:1200px;";
+
+    const lineItems = [
+      { id: "temp-line", label: "Temperature Line" },
+      { id: "cloud-line", label: "Cloud Line" },
+      { id: "precip-line", label: "Precipitation Line" },
+      { id: "wind-line", label: "Wind Line" },
+    ];
+
+    lineItems.forEach((item, index) => {
+      const label = document.createElement("label");
+      label.style.cssText =
+        "color:#eeeeee; font-family:Arial, Helvetica, sans-serif;" +
+        (index < lineItems.length - 1 ? " margin-right: 24px;" : "");
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.id = `toggle-${item.id}-${graphId}`;
+      checkbox.checked = true;
+      checkbox.style.cssText = "margin-right:8px;";
+
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(item.label));
+      linesDiv.appendChild(label);
+    });
+
+    controlsContainer.appendChild(linesDiv);
+  }
+
+  // Create controls for both graphs
+  document.querySelectorAll(".weather-graph").forEach(createGraphControls);
+
+  // Generic, scalable toggle setup for any number of graphs
+  function deriveFlagName(metric, graphId) {
+    const key = graphId === "weather-graph" ? "WeatherGraph" : "SampleData";
+    return `${metric}${
+      metric.endsWith("-line") ? "" : "-highlight"
+    }Enabled${key}`
+      .replace("-", "")
+      .replace("-", "");
+  }
+
+  function setupMetricToggle(graphId, metricId) {
+    const checkboxId = `toggle-${metricId}-${graphId}`;
+    const el = document.getElementById(checkboxId);
+    if (!el) return;
+    const isLine = metricId.endsWith("-line");
+    const metricKey = metricId.replace("-line", "").replace("-highlight", "");
+    const windowFlag = isLine
+      ? `${metricKey}LineEnabled${
+          graphId === "weather-graph" ? "WeatherGraph" : "SampleData"
+        }`
+      : `${metricKey}HighlightEnabled${
+          graphId === "weather-graph" ? "WeatherGraph" : "SampleData"
+        }`;
+    if (typeof window[windowFlag] === "undefined") {
+      window[windowFlag] = true;
+    }
+    el.checked = window[windowFlag] !== false;
+    el.addEventListener("change", (e) => {
+      window[windowFlag] = e.target.checked;
+      const data = window.graphDataById?.[graphId];
+      if (data) redraw(`#${graphId}`, data);
+    });
+  }
+
+  function registerGraphToggles(graphContainer) {
+    const graphId = graphContainer.id;
+    [
+      // highlights
+      "temp-highlight",
+      "cloud-highlight",
+      "wind-highlight",
+      "rain-highlight",
+      // lines
+      "temp-line",
+      "cloud-line",
+      "precip-line",
+      "wind-line",
+    ].forEach((metric) => setupMetricToggle(graphId, metric));
+  }
+
+  document.querySelectorAll(".weather-graph").forEach(registerGraphToggles);
   // Load saved values from cookies
   const savedLat = getCookie("latitude");
   const savedLon = getCookie("longitude");
@@ -669,139 +874,6 @@ window.addEventListener("DOMContentLoaded", () => {
     fetchTemperatureGraph(currentLat, currentLon, 96, currentMinTemp);
   }, 60 * 60 * 1000);
 });
-
-const sampleData_orig = {
-  times: [
-    "2025-12-08T03:00",
-    "2025-12-08T04:00",
-    "2025-12-08T05:00",
-    "2025-12-08T06:00",
-    "2025-12-08T07:00",
-    "2025-12-08T08:00",
-    "2025-12-08T09:00",
-    "2025-12-08T10:00",
-    "2025-12-08T11:00",
-    "2025-12-08T12:00",
-    "2025-12-08T13:00",
-    "2025-12-08T14:00",
-    "2025-12-08T15:00",
-    "2025-12-08T16:00",
-    "2025-12-08T17:00",
-    "2025-12-08T18:00",
-    "2025-12-08T19:00",
-    "2025-12-08T20:00",
-    "2025-12-08T21:00",
-    "2025-12-08T22:00",
-    "2025-12-08T23:00",
-    "2025-12-09T00:00",
-    "2025-12-09T01:00",
-    "2025-12-09T02:00",
-    "2025-12-09T03:00",
-    "2025-12-09T04:00",
-    "2025-12-09T05:00",
-    "2025-12-09T06:00",
-    "2025-12-09T07:00",
-    "2025-12-09T08:00",
-    "2025-12-09T09:00",
-    "2025-12-09T10:00",
-    "2025-12-09T11:00",
-    "2025-12-09T12:00",
-    "2025-12-09T13:00",
-    "2025-12-09T14:00",
-    "2025-12-09T15:00",
-    "2025-12-09T16:00",
-    "2025-12-09T17:00",
-    "2025-12-09T18:00",
-    "2025-12-09T19:00",
-    "2025-12-09T20:00",
-    "2025-12-09T21:00",
-    "2025-12-09T22:00",
-    "2025-12-09T23:00",
-    "2025-12-10T00:00",
-    "2025-12-10T01:00",
-    "2025-12-10T02:00",
-    "2025-12-10T03:00",
-    "2025-12-10T04:00",
-    "2025-12-10T05:00",
-    "2025-12-10T06:00",
-    "2025-12-10T07:00",
-    "2025-12-10T08:00",
-    "2025-12-10T09:00",
-    "2025-12-10T10:00",
-    "2025-12-10T11:00",
-    "2025-12-10T12:00",
-    "2025-12-10T13:00",
-    "2025-12-10T14:00",
-    "2025-12-10T15:00",
-    "2025-12-10T16:00",
-    "2025-12-10T17:00",
-    "2025-12-10T18:00",
-    "2025-12-10T19:00",
-    "2025-12-10T20:00",
-    "2025-12-10T21:00",
-    "2025-12-10T22:00",
-    "2025-12-10T23:00",
-    "2025-12-11T00:00",
-    "2025-12-11T01:00",
-    "2025-12-11T02:00",
-    "2025-12-11T03:00",
-    "2025-12-11T04:00",
-    "2025-12-11T05:00",
-    "2025-12-11T06:00",
-    "2025-12-11T07:00",
-    "2025-12-11T08:00",
-    "2025-12-11T09:00",
-    "2025-12-11T10:00",
-    "2025-12-11T11:00",
-    "2025-12-11T12:00",
-    "2025-12-11T13:00",
-    "2025-12-11T14:00",
-    "2025-12-11T15:00",
-    "2025-12-11T16:00",
-    "2025-12-11T17:00",
-    "2025-12-11T18:00",
-    "2025-12-11T19:00",
-    "2025-12-11T20:00",
-    "2025-12-11T21:00",
-    "2025-12-11T22:00",
-    "2025-12-11T23:00",
-    "2025-12-12T00:00",
-    "2025-12-12T01:00",
-    "2025-12-12T02:00",
-  ],
-  temps: [
-    45.4, 44.1, 42.8, 41.4, 40.3, 41.6, 45, 48.9, 53.2, 56.9, 59.4, 60.5, 80.7,
-    59.8, 57.5, 51.3, 48.1, 45, 42.9, 41.3, 40, 39.1, 38.2, 37.2, 36.1, 35.5,
-    35.1, 35, 34.6, 35.5, 42.9, 48.7, 54.3, 58.3, 61.6, 63.8, 65.1, 64.9, 62.1,
-    55.4, 52.1, 49.7, 48.6, 48.2, 48.2, 49.1, 50.3, 50, 49.9, 49.7, 49.3, 49.4,
-    49.3, 50.9, 56.5, 61.9, 66.6, 70.7, 74.2, 76, 74.6, 72, 67, 61.1, 58.6,
-    57.5, 55.7, 53.7, 52.3, 51.1, 50, 49.1, 48.4, 48, 47.1, 46.5, 46, 47.8,
-    52.4, 56.8, 60.6, 63.7, 66.2, 68.2, 69.1, 69.3, 66.2, 61.7, 59.9, 58.8,
-    58.1, 57.4, 57, 56.6, 56.5, 56.7,
-  ],
-  cloudCover: [
-    0, 0, 0, 2, 1, 2, 3, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
-    1, 2, 2, 3, 3, 7, 4, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 5, 7, 100, 100, 100, 7, 100, 7, 7,
-    11, 21, 100, 100, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  ],
-  precipProb: [
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  ],
-  windSpeed: [
-    13.1, 13.5, 12.3, 9.7, 10.9, 11.6, 13, 13.5, 13.6, 12.5, 12.1, 11.5, 10.8,
-    10, 7.7, 6.2, 6.8, 5.8, 4.3, 1.8, 1.6, 2.7, 4.9, 2.6, 6.5, 3.6, 3.2, 4.4,
-    6.8, 5.2, 2, 5.5, 9.4, 10.5, 11.7, 11.7, 11.8, 11.3, 9.8, 8, 7.4, 6, 8.1,
-    7.8, 7.9, 8.5, 8.7, 8.1, 8.4, 8.4, 7.3, 8, 7.1, 7.8, 9, 8.5, 6.5, 6.3, 5.8,
-    9.1, 13.5, 14.5, 14.2, 11.4, 10.9, 12.5, 10.7, 9.6, 9.1, 8.9, 7.4, 7.4, 6.1,
-    6.6, 7.4, 6.1, 5.4, 4.4, 5, 5.5, 3.4, 3.3, 5.4, 6.7, 7.7, 8.3, 6.5, 7.4,
-    7.2, 7.9, 7.4, 7.4, 6.9, 7.1, 6.7, 5.9,
-  ],
-  minTempHighlight: 70,
-};
 
 const sampleData = {
   times: [
