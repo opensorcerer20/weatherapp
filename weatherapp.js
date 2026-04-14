@@ -48,9 +48,8 @@ let apiCallCount = 0;
 
 function incrementApiCounter() {
   apiCallCount++;
-  document.getElementById(
-    "api-counter"
-  ).textContent = `API Calls: ${apiCallCount}`;
+  document.getElementById("api-counter").textContent =
+    `API Calls: ${apiCallCount}`;
 }
 
 const DAYS_OF_WEEK = [
@@ -145,20 +144,20 @@ const weatherCache = {
     if (!timeValid) {
       console.log(
         `Cache expired (${Math.round(
-          (now - cached.timestamp) / 1000 / 60
-        )} minutes old)`
+          (now - cached.timestamp) / 1000 / 60,
+        )} minutes old)`,
       );
     }
     if (!locationMatch) {
       console.log(
-        `Location mismatch: cached (${cached.location.lat}, ${cached.location.lon}) vs requested (${lat}, ${lon})`
+        `Location mismatch: cached (${cached.location.lat}, ${cached.location.lon}) vs requested (${lat}, ${lon})`,
       );
     }
     if (timeValid && locationMatch) {
       console.log(
         `Cache is valid (${Math.round(
-          (fifteenMinutes - (now - cached.timestamp)) / 1000 / 60
-        )} minutes remaining)`
+          (fifteenMinutes - (now - cached.timestamp)) / 1000 / 60,
+        )} minutes remaining)`,
       );
     }
 
@@ -252,7 +251,7 @@ async function fetchTemperatureGraph(
   latitude,
   longitude,
   hours,
-  minTempHighlight
+  minTempHighlight,
 ) {
   // Check cache first
   const cachedData = weatherCache.getTemperature(latitude, longitude);
@@ -294,32 +293,47 @@ async function fetchTemperatureGraph(
       const times = data.hourly.time.slice(startIndex, startIndex + hours);
       const temps = data.hourly.temperature_2m.slice(
         startIndex,
-        startIndex + hours
+        startIndex + hours,
       );
       const cloudCover = data.hourly.cloud_cover.slice(
         startIndex,
-        startIndex + hours
+        startIndex + hours,
       );
       const precipProb = data.hourly.precipitation_probability.slice(
         startIndex,
-        startIndex + hours
+        startIndex + hours,
       );
       const windSpeed = data.hourly.wind_speed_10m.slice(
         startIndex,
-        startIndex + hours
+        startIndex + hours,
       );
 
       // Store current graph data for redrawing
+      /*
+        {
+          "times": [
+            "2025-12-08T03:00"
+          ],
+          "temps": [
+            45.4
+          ],
+          "cloudCover": [
+            0
+          ],
+          "precipProb": [
+            0
+          ],
+          "windSpeed": [
+            13.1
+          ]
+        }
+      */
       currentGraphData = { times, temps, cloudCover, precipProb, windSpeed };
 
       // Create the graph
       drawTemperatureGraph({
         divId: "#weather-graph",
-        times,
-        temps,
-        cloudCover,
-        precipProb,
-        windSpeed,
+        ...currentGraphData,
         minTempHighlight,
       });
 
@@ -608,10 +622,10 @@ function drawTemperatureGraph({
         hour === 0
           ? "12am"
           : hour < 12
-          ? hour + "am"
-          : hour === 12
-          ? "12pm"
-          : hour - 12 + "pm";
+            ? hour + "am"
+            : hour === 12
+              ? "12pm"
+              : hour - 12 + "pm";
       ctx.fillStyle = "#eeeeee";
       ctx.font = "10px Arial";
       ctx.textAlign = "center";
@@ -835,7 +849,7 @@ window.addEventListener("DOMContentLoaded", () => {
       updateLocation(lat, lon);
     } else {
       alert(
-        "Please enter valid latitude (-90 to 90) and longitude (-180 to 180)"
+        "Please enter valid latitude (-90 to 90) and longitude (-180 to 180)",
       );
     }
   });
@@ -862,17 +876,20 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   // Refresh graph data every 60 minutes
-  setInterval(() => {
-    const currentLat = parseFloat(document.getElementById("latitude").value);
-    const currentLon = parseFloat(document.getElementById("longitude").value);
-    const currentMinTemp = parseInt(minTempInput.value) || 70;
+  setInterval(
+    () => {
+      const currentLat = parseFloat(document.getElementById("latitude").value);
+      const currentLon = parseFloat(document.getElementById("longitude").value);
+      const currentMinTemp = parseInt(minTempInput.value) || 70;
 
-    // Clear cache to force fresh data
-    weatherCache.clear();
+      // Clear cache to force fresh data
+      weatherCache.clear();
 
-    // Refresh graph with current values
-    fetchTemperatureGraph(currentLat, currentLon, 96, currentMinTemp);
-  }, 60 * 60 * 1000);
+      // Refresh graph with current values
+      fetchTemperatureGraph(currentLat, currentLon, 96, currentMinTemp);
+    },
+    60 * 60 * 1000,
+  );
 });
 
 const sampleData = {
