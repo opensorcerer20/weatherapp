@@ -95,7 +95,9 @@ function updateLocation(lat, lon) {
 
   const minTempInput = document.getElementById("min-temp-highlight");
   const minTemp = parseInt(minTempInput.value) || 70;
-  fetchTemperatureGraph(lat, lon, 96, minTemp);
+  const minWindInput = document.getElementById("min-wind-highlight");
+  const minWind = parseInt(minWindInput.value) || 17;
+  fetchTemperatureGraph(lat, lon, 96, minTemp, minWind);
 }
 
 // Global variable to store current graph data for redrawing
@@ -252,6 +254,7 @@ async function fetchTemperatureGraph(
   longitude,
   hours,
   minTempHighlight,
+  minWindHighlight,
 ) {
   // Check cache first
   const cachedData = weatherCache.getTemperature(latitude, longitude);
@@ -335,6 +338,7 @@ async function fetchTemperatureGraph(
         divId: "#weather-graph",
         ...currentGraphData,
         minTempHighlight,
+        minWindHighlight,
       });
 
       // draw second graph using sample data
@@ -343,6 +347,7 @@ async function fetchTemperatureGraph(
           divId: "#sampledata",
           ...sampleData,
           minTempHighlight,
+          minWindHighlight,
         });
       } else {
         console.log("missing sample data");
@@ -366,9 +371,10 @@ function drawTemperatureGraph({
   precipProb,
   windSpeed,
   minTempHighlight,
+  minWindHighlight,
 }) {
   const maxCloudCover = 80;
-  const maxWind = 17;
+  const maxWind = minWindHighlight || 17;
   const maxPrecip = 40;
   const graphContainer = document.querySelector(divId);
 
@@ -823,11 +829,23 @@ window.addEventListener("DOMContentLoaded", () => {
   if (savedMinTemp !== null) {
     document.getElementById("min-temp-highlight").value = savedMinTemp;
   }
+  const savedMinWind = getCookie("minWindHighlight");
+  if (savedMinWind !== null) {
+    document.getElementById("min-wind-highlight").value = savedMinWind;
+  }
 
   const initialMinTemp =
     parseInt(document.getElementById("min-temp-highlight").value) || 70;
+  const initialMinWind =
+    parseInt(document.getElementById("min-wind-highlight").value) || 17;
 
-  fetchTemperatureGraph(LOCATION.lat, LOCATION.lon, 96, initialMinTemp);
+  fetchTemperatureGraph(
+    LOCATION.lat,
+    LOCATION.lon,
+    96,
+    initialMinTemp,
+    initialMinWind,
+  );
 
   // Add input event listener for minimum temperature highlight
   const minTempInput = document.getElementById("min-temp-highlight");
@@ -871,6 +889,32 @@ window.addEventListener("DOMContentLoaded", () => {
         divId: "#weather-graph",
         ...currentGraphData,
         minTempHighlight: value,
+        minWindHighlight:
+          parseInt(document.getElementById("min-wind-highlight").value) || 17,
+      });
+    }
+  });
+
+  // Add input event listener for minimum wind highlight
+  const minWindInput = document.getElementById("min-wind-highlight");
+  minWindInput.addEventListener("input", (e) => {
+    e.target.value = e.target.value.replace(/[^0-9]/g, "");
+
+    const value = parseInt(e.target.value);
+
+    // Save to cookie
+    if (!isNaN(value) && value >= 1) {
+      setCookie("minWindHighlight", value);
+    }
+
+    // Only redraw if >= 1 and we have graph data
+    if (!isNaN(value) && value >= 1 && currentGraphData) {
+      drawTemperatureGraph({
+        divId: "#weather-graph",
+        ...currentGraphData,
+        minTempHighlight:
+          parseInt(document.getElementById("min-temp-highlight").value) || 70,
+        minWindHighlight: value,
       });
     }
   });
@@ -881,12 +925,20 @@ window.addEventListener("DOMContentLoaded", () => {
       const currentLat = parseFloat(document.getElementById("latitude").value);
       const currentLon = parseFloat(document.getElementById("longitude").value);
       const currentMinTemp = parseInt(minTempInput.value) || 70;
+      const currentMinWind =
+        parseInt(document.getElementById("min-wind-highlight").value) || 17;
 
       // Clear cache to force fresh data
       weatherCache.clear();
 
       // Refresh graph with current values
-      fetchTemperatureGraph(currentLat, currentLon, 96, currentMinTemp);
+      fetchTemperatureGraph(
+        currentLat,
+        currentLon,
+        96,
+        currentMinTemp,
+        currentMinWind,
+      );
     },
     60 * 60 * 1000,
   );
