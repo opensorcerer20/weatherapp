@@ -478,8 +478,19 @@ function drawTemperatureGraph({
   temps.forEach((_, i) => {
     const x = padding + (graphWidth / (dataPoints - 1)) * i;
     const width = i < dataPoints - 1 ? graphWidth / (dataPoints - 1) : 0;
+    const time = new Date(times[i]);
+    const hour = time.getHours();
+    const isWithinHighlightWindow = hour >= 8 && hour <= 18; // 7:30am to 6:30pm
+
     for (const cfg of highlightConfig) {
-      if (cfg.enabled() && cfg.compare(cfg.valueAt(i), cfg.threshold)) {
+      // For temperature highlights, only show between 6am-6pm; other metrics can show anytime
+      const shouldHighlight =
+        cfg.metric === "temp"
+          ? isWithinHighlightWindow &&
+            cfg.compare(cfg.valueAt(i), cfg.threshold)
+          : cfg.enabled() && cfg.compare(cfg.valueAt(i), cfg.threshold);
+
+      if (cfg.enabled() && shouldHighlight) {
         ctx.fillStyle = cfg.color + "33";
         ctx.fillRect(x - width / 2, padding, width, graphHeight);
         break; // only one highlight per column
@@ -1044,9 +1055,9 @@ const sampleData = {
     "2025-12-12T02:00",
   ],
   temps: [
-    45.0, 45.65, 47.55, 50.56, 54.45, 58.94, 63.69, 68.36, 72.59, 76.07, 78.55,
-    79.84, 79.84, 78.55, 76.07, 72.59, 68.36, 63.69, 58.94, 54.45, 50.56, 47.55,
-    45.65, 45.0, 45.0, 45.65, 47.55, 50.56, 54.45, 58.94, 63.69, 68.36, 72.59,
+    45.0, 45.65, 78.55, 78.55, 78.55, 78.55, 78.55, 78.55, 78.55, 78.55, 78.55,
+    78.55, 78.55, 78.55, 78.55, 78.55, 78.55, 78.55, 78.55, 78.55, 78.55, 52,
+    48, 45.0, 45.0, 45.65, 47.55, 50.56, 54.45, 58.94, 63.69, 68.36, 72.59,
     76.07, 78.55, 79.84, 79.84, 78.55, 76.07, 72.59, 68.36, 63.69, 58.94, 54.45,
     50.56, 47.55, 45.65, 45.0, 45.0, 45.65, 47.55, 50.56, 54.45, 58.94, 63.69,
     68.36, 72.59, 76.07, 78.55, 79.84, 79.84, 78.55, 76.07, 72.59, 68.36, 63.69,
